@@ -52,6 +52,18 @@ def _short(s: str, n: int = 300) -> str:
     s = s or ""
     return s[:n]
 
+def _assign_scores_and_ids(results: List[Dict[str, Any]], prefix: str) -> List[Dict[str, Any]]:
+    """
+    Assign doc_id and simulated confidence score based on rank.
+    Score decays: 0.95, 0.90, 0.85, ... min 0.4
+    """
+    for i, item in enumerate(results):
+        item["doc_id"] = f"{prefix}_{i+1}"
+        # Simulated score: decay by 0.05 for each rank, min 0.4
+        item["score"] = max(0.4, 0.95 - (i * 0.05))
+    return results
+
+
 
 # =========================
 # Tool 2: Wikipedia search (NO fallback here)
@@ -97,6 +109,7 @@ def tool_wiki_search(query: str, top_k: int = 3) -> Dict[str, Any]:
                 "source": "wikipedia",
             })
 
+        results = _assign_scores_and_ids(results, "wiki")
         return {"results": results}
 
     except Exception as e:
@@ -176,6 +189,7 @@ def tool_baidu_search(query: str, top_k: int = 5) -> Dict[str, Any]:
 
         results.append({"title": title, "url": href, "snippet": snippet, "source": "baidu"})
 
+    results = _assign_scores_and_ids(results, "baidu")
     page_title = soup.title.get_text(strip=True) if soup.title else ""
     return {"results": results, "debug": {**debug, "page_title": page_title}}
 
@@ -227,6 +241,8 @@ def tool_serpapi_search(query: str, top_k: int = 5) -> Dict[str, Any]:
             "snippet": item.get("snippet", ""),
             "source": "serpapi",
         })
+    
+    results = _assign_scores_and_ids(results, "serp")
     return {"results": results}
 
 
