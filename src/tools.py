@@ -1,191 +1,306 @@
-# src/tools.py
 import ast
 import json
 import re
-import time
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Dict, List, Tuple
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
+from bs4 import BeautifulSoup
+from urllib.parse import quote_plus
 import requests
-from jsonschema import validate, ValidationError
 
-# -----------------------------
+
+# =========================
 # Tool 1: Safe calculator
-# -----------------------------
+# =========================
 _ALLOWED_AST_NODES = (
-    ast.Expression, ast.BinOp, ast.UnaryOp, ast.Num, ast.Constant,
-    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.Mod,
-    ast.USub, ast.UAdd, ast.FloorDiv,
-    ast.Load, ast.Tuple
+    ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant,
+    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.Mod, ast.FloorDiv,
+    ast.UAdd, ast.USub,
 )
 
 def _safe_eval_math(expr: str) -> float:
     """
-    一个非常严格的数学表达式 eval。
-    只允许数字和 + - * / ** % // ()，拒绝变量名、函数调用、属性访问等。
+    Only allow numeric expressions with basic operators.
+    Blocks variables, attributes, and function calls.
     """
     expr = expr.strip()
     node = ast.parse(expr, mode="eval")
 
     for n in ast.walk(node):
         if not isinstance(n, _ALLOWED_AST_NODES):
-            raise ValueError(f"Disallowed expression part: {type(n).__name__}")
-
-        # 禁止 Name（变量）与 Call（函数调用）
+            raise ValueError(f"Disallowed AST node: {type(n).__name__}")
         if isinstance(n, ast.Name) or isinstance(n, ast.Call) or isinstance(n, ast.Attribute):
             raise ValueError("Names/calls/attributes are not allowed")
 
-    val = eval(compile(node, "<math>", "eval"), {"__builtins__": {}}, {})
-    if isinstance(val, (int, float)):
-        return float(val)
-    raise ValueError("Expression did not evaluate to a number")
+    val = eval(compile(node, "<safe-math>", "eval"), {"__builtins__": {}}, {})
+    if not isinstance(val, (int, float)):
+        raise ValueError("Expression did not evaluate to a number")
+    return float(val)
 
-def calc_tool(expression: str) -> Dict[str, Any]:
-    """
-    输入: expression
-    输出: {"value": number}
-    """
+def tool_calc(expression: str) -> Dict[str, Any]:
     return {"value": _safe_eval_math(expression)}
 
-CALC_SCHEMA_IN = {
-    "type": "object",
-    "properties": {
-        "expression": {"type": "string", "minLength": 1}
-    },
-    "required": ["expression"],
-    "additionalProperties": False
-}
-CALC_SCHEMA_OUT = {
-    "type": "object",
-    "properties": {
-        "value": {"type": "number"}
-    },
-    "required": ["value"],
-    "additionalProperties": False
-}
 
-# -----------------------------
-# Tool 2: Wikipedia search (simple)
-# -----------------------------
+# =========================
+# Tool 2: Wikipedia search
+# =========================
 def _strip_html(s: str) -> str:
-    return re.sub(r"<.*?>", "", s)
+    return re.sub(r"<.*?>", "", s or "")
 
-def wiki_search_tool(query: str, top_k: int = 3) -> Dict[str, Any]:
-    """
-    用 MediaWiki API 做简单检索。
-    输出给 agent 的内容必须当作“不可信数据”，仅用于事实支撑。
-    """
+def tool_wiki_search(query: str, top_k: int = 3) -> Dict[str, Any]:
     url = "https://en.wikipedia.org/w/api.php"
     params = {
         "action": "query",
         "list": "search",
         "srsearch": query,
         "format": "json",
-        "srlimit": top_k,
-        "utf8": 1
+        "srlimit": max(1, min(int(top_k), 5)),
+        "utf8": 1,
     }
-    r = requests.get(url, params=params, timeout=8)
+    headers = {
+        # Wikipedia 推荐提供清晰 UA（含项目名/联系方式更好）
+        "User-Agent": "pyforai-projectB/1.0 (contact: yguo704@connect.hkust-gz.edu.cn)",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    r = requests.get(url, params=params, headers=headers, timeout=8)
     r.raise_for_status()
     data = r.json()
-    hits = []
+
+    results: List[Dict[str, Any]] = []
     for item in data.get("query", {}).get("search", []):
-        title = item.get("title", "")
-        snippet = _strip_html(item.get("snippet", ""))
-        pageid = item.get("pageid", None)
-        hits.append({
-            "title": title,
-            "snippet": snippet,
-            "pageid": pageid
+        results.append({
+            "title": item.get("title", ""),
+            "snippet": _strip_html(item.get("snippet", "")),
+            "pageid": item.get("pageid", None),
         })
-    return {"results": hits}
+    return {"results": results}
 
-WIKI_SCHEMA_IN = {
-    "type": "object",
-    "properties": {
-        "query": {"type": "string", "minLength": 1},
-        "top_k": {"type": "integer", "minimum": 1, "maximum": 5}
-    },
-    "required": ["query"],
-    "additionalProperties": False
-}
-WIKI_SCHEMA_OUT = {
-    "type": "object",
-    "properties": {
-        "results": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "title": {"type": "string"},
-                    "snippet": {"type": "string"},
-                    "pageid": {"type": ["integer", "null"]}
-                },
-                "required": ["title", "snippet", "pageid"],
-                "additionalProperties": False
-            }
-        }
-    },
-    "required": ["results"],
-    "additionalProperties": False
-}
+# =========================
+# Tool 3: Baidu search
+# =========================
+def tool_baidu_search(query: str, top_k: int = 5) -> Dict[str, Any]:
+    """
+    Use Baidu search result page (HTML) and parse top results.
+    Notes:
+      - Baidu may change HTML structure; parsing is best-effort.
+      - Returned 'url' may be a Baidu redirect link.
+    """
+    top_k = max(1, min(int(top_k), 10))
+    q = (query or "").strip()
+    if not q:
+        return {"results": []}
 
-# -----------------------------
-# Tool registry + schema validation
-# -----------------------------
-@dataclass
-class ToolSpec:
-    name: str
-    description: str
-    schema_in: Dict[str, Any]
-    schema_out: Dict[str, Any]
-    fn: Callable[..., Dict[str, Any]]
+    # Baidu search URL
+    url = f"https://www.baidu.com/s?wd={quote_plus(q)}"
 
+    headers = {
+        # A realistic UA helps avoid 403 in some environments
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    }
+
+    r = requests.get(url, headers=headers, timeout=10)
+    r.raise_for_status()
+
+    soup = BeautifulSoup(r.text, "lxml")
+
+    # Baidu results are often in #content_left, each item can be .result or [data-log]
+    container = soup.select_one("#content_left") or soup
+    candidates = container.select("div.result, div.result-op, div[data-log]")
+
+    results: List[Dict[str, Any]] = []
+    for item in candidates:
+        if len(results) >= top_k:
+            break
+
+        # Title/link
+        a = item.select_one("h3 a") or item.select_one("a")
+        if not a:
+            continue
+        title = a.get_text(" ", strip=True)
+        href = a.get("href", "")
+
+        # Snippet/abstract: Baidu often uses .c-abstract or .content-right_8Zs40 etc
+        snippet_el = item.select_one(".c-abstract") or item.select_one(".content-right_8Zs40") or item.select_one("div.c-span-last")
+        snippet = snippet_el.get_text(" ", strip=True) if snippet_el else ""
+
+        # Filter out empty titles
+        if not title:
+            continue
+
+        results.append({
+            "title": title,
+            "url": href,
+            "snippet": snippet,
+            "source": "baidu"
+        })
+
+    return {"results": results}
+
+# =========================
+# Tool 4: Planner (deterministic)
+# =========================
+def tool_planner(goal: str, constraints: str = "", tools_available: List[str] = None) -> Dict[str, Any]:
+    """
+    A lightweight non-LLM planner.
+    It returns a plan the LLM can follow, with tool hints.
+    """
+    tools_available = tools_available or ["planner", "calc", "wiki_search"]
+    g = (goal or "").strip()
+    c = (constraints or "").strip()
+
+    steps = []
+    steps.append({
+        "step": 1,
+        "action": "Restate the goal in one sentence and identify what facts or computations are needed.",
+        "tool_hint": None
+    })
+
+    # Heuristic tool hints
+    needs_math = any(k in g.lower() for k in ["compute", "calculate", "math", "sum", "percentage", "times", "divide"])
+    needs_search = any(k in g.lower() for k in ["who is", "what is", "capital", "definition", "wiki", "wikipedia", "history"])
+
+    if needs_search and "wiki_search" in tools_available:
+        steps.append({
+            "step": len(steps) + 1,
+            "action": "Fetch key facts via Wikipedia search.",
+            "tool_hint": {"tool": "wiki_search", "args": {"query": "keywords from the question", "top_k": 3}}
+        })
+
+    if needs_math and "calc" in tools_available:
+        steps.append({
+            "step": len(steps) + 1,
+            "action": "Perform required computations using the calculator.",
+            "tool_hint": {"tool": "calc", "args": {"expression": "fill in expression"}}
+        })
+
+    steps.append({
+        "step": len(steps) + 1,
+        "action": "Draft the final answer with short justification. If tool results are uncertain, say so.",
+        "tool_hint": None
+    })
+
+    return {
+        "goal": g,
+        "constraints": c,
+        "tools_available": tools_available,
+        "plan": steps,
+        "stop_when": "You have enough info to answer or you hit the tool/step limits."
+    }
+
+
+# =========================
+# Tool registry + execution with timeout
+# =========================
 class ToolRegistry:
     def __init__(self):
-        self._tools: Dict[str, ToolSpec] = {}
+        self._fns = {
+            "calc": tool_calc,
+            "wiki_search": tool_wiki_search,
+            "baidu_search": tool_baidu_search,
+            "planner": tool_planner,
+        }
 
-    def register(self, tool: ToolSpec) -> None:
-        self._tools[tool.name] = tool
+    def allowed_tools(self) -> List[str]:
+        return list(self._fns.keys())
 
-    def list_for_prompt(self) -> str:
-        """
-        给 prompt 的工具说明文本：把 schema 清晰写出来。
-        """
-        blocks = []
-        for t in self._tools.values():
-            blocks.append(
-                f"Tool: {t.name}\n"
-                f"Description: {t.description}\n"
-                f"Input JSON Schema: {json.dumps(t.schema_in, ensure_ascii=False)}\n"
-                f"Output JSON Schema: {json.dumps(t.schema_out, ensure_ascii=False)}\n"
-            )
-        return "\n".join(blocks)
+    def call_with_timeout(self, name: str, args: Dict[str, Any], timeout_s: float) -> Tuple[Dict[str, Any], str]:
+        if name not in self._fns:
+            return {}, f"unknown_tool({name})"
 
-    def call(self, name: str, args: Dict[str, Any]) -> Tuple[Dict[str, Any], str]:
-        """
-        返回 (tool_output, error_message)
-        err 为空字符串表示成功。
-        """
-        if name not in self._tools:
-            return {}, f"Unknown tool: {name}"
+        fn = self._fns[name]
 
-        tool = self._tools[name]
-        try:
-            validate(instance=args, schema=tool.schema_in)
-        except ValidationError as e:
-            return {}, f"Tool input schema validation failed: {e.message}"
+        def run():
+            return fn(**args)
 
-        try:
-            out = tool.fn(**args)
-        except TypeError as e:
-            return {}, f"Tool argument error: {str(e)}"
-        except Exception as e:
-            return {}, f"Tool execution error: {str(e)}"
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(run)
+            try:
+                out = fut.result(timeout=timeout_s)
+                if not isinstance(out, dict):
+                    return {}, f"tool_output_not_dict({name})"
+                return out, ""
+            except FuturesTimeoutError:
+                return {}, f"tool_timeout({name})"
+            except TypeError as e:
+                return {}, f"bad_args({name}): {str(e)}"
+            except Exception as e:
+                return {}, f"tool_failed({name}): {type(e).__name__}: {str(e)}"
 
-        # 输出也做 schema 校验，便于调试和防跑飞
-        try:
-            validate(instance=out, schema=tool.schema_out)
-        except ValidationError as e:
-            return {}, f"Tool output schema validation failed: {e.message}"
 
-        return out, ""
+def qwen_tools_schema() -> List[Dict[str, Any]]:
+    """
+    Tools schema for Qwen function calling (OpenAI-compatible tools format).
+    """
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "planner",
+                "description": "Create a short step-by-step plan with tool hints before execution.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "goal": {"type": "string", "description": "User goal or question"},
+                        "constraints": {"type": "string", "description": "Optional constraints"},
+                        "tools_available": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Available tool names"
+                        }
+                    },
+                    "required": ["goal"],
+                    "additionalProperties": False
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "calc",
+                "description": "Safely evaluate a basic arithmetic expression, returns numeric value.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "expression": {"type": "string", "description": "Arithmetic expression, e.g. (12+8)/5"}
+                    },
+                    "required": ["expression"],
+                    "additionalProperties": False
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "wiki_search",
+                "description": "Search English Wikipedia and return top results with snippets.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query"},
+                        "top_k": {"type": "integer", "minimum": 1, "maximum": 5}
+                    },
+                    "required": ["query"],
+                    "additionalProperties": False
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "baidu_search",
+                "description": "Search the web via Baidu and return top results with title/url/snippet.",
+                "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query"},
+                    "top_k": {"type": "integer", "minimum": 1, "maximum": 10}
+                },
+                "required": ["query"],
+                "additionalProperties": False
+                }
+            }
+        },
+    ]

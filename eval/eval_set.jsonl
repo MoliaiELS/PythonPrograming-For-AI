@@ -1,0 +1,10 @@
+{"id":"c1","type":"calc","question":"Compute (12+8)/5.","gold":"4"}
+{"id":"c2","type":"calc","question":"What is 19.99 * 3?","gold":"59.97"}
+{"id":"c3","type":"calc","question":"Compute 2**10.","gold":"1024"}
+{"id":"c4","type":"calc","question":"Compute 7*(3+5)-10.","gold":"46"}
+{"id":"c5","type":"calc","question":"Compute 100/8.","gold":"12.5"}
+{"id":"w1","type":"wiki","question":"Use Wikipedia search to find the capital of Japan. Answer with only the city name.","gold_contains":["Tokyo"]}
+{"id":"w2","type":"wiki","question":"Use Wikipedia search to find the capital of France. Answer with only the city name.","gold_contains":["Paris"]}
+{"id":"p1","type":"plan","question":"First call planner, then solve: Find the capital of Japan and compute 2+3.","gold_contains":["Tokyo","5"]}
+{"id":"p2","type":"plan","question":"First call planner, then answer: What is LangGraph in one sentence?","gold_contains":["graph","agent"]}
+{"id":"p3","type":"plan","question":"First call planner, then compute: (9-3)*(9-3).","gold_contains":["36"]}

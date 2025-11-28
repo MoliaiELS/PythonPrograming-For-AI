@@ -1,11 +1,20 @@
-# src/config.py
 from dataclasses import dataclass
+import os
 
 @dataclass
 class AgentConfig:
-    model: str = "gpt-4.1"  # 也可换成 gpt-4o 等，看你额度和效果
+    # Qwen OpenAI-compatible
+    api_key: str = os.getenv("DASHSCOPE_API_KEY", "")
+    base_url: str = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    model: str = os.getenv("QWEN_MODEL", "qwen-plus")
+
     temperature: float = 0.2
-    max_steps: int = 8                # 护栏 1: 防止无限循环
-    tool_timeout_s: float = 8.0       # 护栏 2: tool 超时
-    llm_timeout_s: float = 60.0       # API 请求超时（客户端层）
-    trace_path: str = "trace.jsonl"   # 调试用 trace
+
+    # Guardrails
+    recursion_limit: int = 20     # LangGraph max super-steps
+    max_tool_calls: int = 6       # Hard limit on tool executions
+    tool_timeout_s: float = 6.0   # Per-tool timeout
+    max_repeat_same_call: int = 2 # Repeat same tool call signature limit
+
+    # Logging
+    trace_path: str = "trace.jsonl"
