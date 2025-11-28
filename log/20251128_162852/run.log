@@ -1,0 +1,7 @@
+2025-11-28 16:28:52,639 | INFO | Session started. debug=False
+2025-11-28 16:29:14,388 | INFO | Question: How much would it cost to travel around the UK for 7 days
+2025-11-28 16:29:26,422 | INFO | Turn saved. elapsed_s=12.032
+2025-11-28 16:29:58,307 | INFO | Question: planed a 7-days trip to USA
+2025-11-28 16:30:33,914 | INFO | Turn saved. elapsed_s=35.605
+2025-11-28 16:31:28,194 | INFO | KeyboardInterrupt exit.
+2025-11-28 16:31:28,194 | INFO | Session ended.
