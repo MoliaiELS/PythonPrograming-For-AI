@@ -1,7 +1,9 @@
 import json
+from pdb import run
 import re
 import time
 from typing import Any, Dict, List, Optional, TypedDict, Literal
+from collections import Counter
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.errors import GraphRecursionError
@@ -349,7 +351,7 @@ Final: Photosynthesis is the process by which plants and some microbes use light
 
     app = graph.compile()
 
-    def run(question: str) -> Dict[str, Any]:
+    def _run_single(question: str) -> Dict[str, Any]:
         state: AgentState = {
             "messages": [{"role": "user", "content": question}],
             "tool_calls_used": 0,
@@ -374,4 +376,89 @@ Final: Photosynthesis is the process by which plants and some microbes use light
 
         return {"answer": _extract_final(answer_raw), "trace": out["trace"]}
 
+    def run(question: str) -> Dict[str, Any]:
+        # Check for consistency_k in config, default to 1 if not present
+        k = getattr(cfg, "consistency_k", 1)
+        
+        if k <= 1:
+            return _run_single(question)
+
+        # Run K traces
+        results = []
+        for i in range(k):
+            results.append(_run_single(question))
+
+        # 1. Simple Exact Match Check (Fast Path)
+        normalized = [r["answer"].strip().lower() for r in results]
+        counts = Counter(normalized)
+        winner_val, winner_count = counts.most_common(1)[0]
+
+        # If unanimous (everyone agrees exactly), return immediately
+        if winner_count == k:
+            best_res = next(r for r, n in zip(results, normalized) if n == winner_val)
+            best_res["trace"].append({
+                "type": "consistency_vote",
+                "method": "unanimous",
+                "k": k,
+                "winner_count": winner_count
+            })
+            return best_res
+
+        # 2. LLM Semantic Verifier (Slow Path for Long Text/Disagreement)
+        # Construct a prompt to ask the model to pick the best/most consistent answer
+        candidates_str = "\n".join([f"[{i+1}] {r['answer']}" for i, r in enumerate(results)])
+        
+        verifier_prompt = f"""Question: {question}
+
+I have generated {k} candidate answers. Please identify which one is the best.
+Criteria:
+1. Semantic Consistency: Pick the answer that matches the meaning of the majority of candidates.
+2. Accuracy & Detail: If no majority, pick the most detailed and correct one.
+
+Candidates:
+{candidates_str}
+
+Return ONLY the index number of the best answer (e.g. 1). Do not output anything else."""
+
+        try:
+            # Use the same client/model to judge
+            resp = client.chat.completions.create(
+                model=cfg.model,
+                messages=[{"role": "user", "content": verifier_prompt}],
+                temperature=0.0 # Deterministic judgment
+            )
+            content = resp.choices[0].message.content.strip()
+            
+            # Extract the number from response (e.g. "1" or "The best is 1")
+            match = re.search(r"\d+", content)
+            if match:
+                idx = int(match.group(0)) - 1
+                if 0 <= idx < k:
+                    best_res = results[idx]
+                    best_res["trace"].append({
+                        "type": "consistency_vote",
+                        "method": "verifier_llm",
+                        "k": k,
+                        "verifier_choice": idx + 1,
+                        "candidates": [r["answer"] for r in results]
+                    })
+                    return best_res
+        except Exception as e:
+            # If verifier fails, fall through to simple majority
+            pass
+
+        # 3. Fallback: Simple Majority Vote Heuristic
+        best_res = next(r for r, n in zip(results, normalized) if n == winner_val)
+        
+        best_res["trace"].append({
+            "type": "consistency_vote",
+            "method": "simple_majority_fallback",
+            "k": k,
+            "winner_count": winner_count,
+            "candidates": [r["answer"] for r in results]
+        })
+        
+        return best_res
+
     return run
+            
