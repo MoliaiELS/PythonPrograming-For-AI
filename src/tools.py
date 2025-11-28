@@ -1,5 +1,6 @@
 import ast
 import json
+import os
 import re
 from typing import Any, Dict, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
@@ -58,89 +59,163 @@ def tool_wiki_search(query: str, top_k: int = 3) -> Dict[str, Any]:
         "utf8": 1,
     }
     headers = {
-        # Wikipedia 推荐提供清晰 UA（含项目名/联系方式更好）
-        "User-Agent": "pyforai-projectB/1.0 (contact: yguo704@connect.hkust-gz.edu.cn)",
+        "User-Agent": "pyforai-projectB/1.0 (contact: yguo704@connect.hkust-g.edu.cn)",
         "Accept": "application/json",
         "Accept-Language": "en-US,en;q=0.9",
     }
-    r = requests.get(url, params=params, headers=headers, timeout=8)
-    r.raise_for_status()
-    data = r.json()
 
-    results: List[Dict[str, Any]] = []
-    for item in data.get("query", {}).get("search", []):
-        results.append({
-            "title": item.get("title", ""),
-            "snippet": _strip_html(item.get("snippet", "")),
-            "pageid": item.get("pageid", None),
-        })
-    return {"results": results}
+    try:
+        r = requests.get(url, params=params, headers=headers, timeout=8)
+        r.raise_for_status()
+        data = r.json()
+
+        results: List[Dict[str, Any]] = []
+        for item in data.get("query", {}).get("search", []):
+            results.append({
+                "title": item.get("title", ""),
+                "snippet": _strip_html(item.get("snippet", "")),
+                "pageid": item.get("pageid", None),
+                "source": "wikipedia",
+            })
+
+        if results:
+            return {"results": results}
+
+        # 空结果也走 fallback
+        raise RuntimeError("empty_results")
+
+    except Exception as e:
+        return {
+            "results": [],
+            "error": f"wiki_failed_{type(e).__name__}",
+        }
+
 
 # =========================
 # Tool 3: Baidu search
 # =========================
 def tool_baidu_search(query: str, top_k: int = 5) -> Dict[str, Any]:
-    """
-    Use Baidu search result page (HTML) and parse top results.
-    Notes:
-      - Baidu may change HTML structure; parsing is best-effort.
-      - Returned 'url' may be a Baidu redirect link.
-    """
     top_k = max(1, min(int(top_k), 10))
     q = (query or "").strip()
     if not q:
         return {"results": []}
 
-    # Baidu search URL
     url = f"https://www.baidu.com/s?wd={quote_plus(q)}"
 
     headers = {
-        # A realistic UA helps avoid 403 in some environments
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        ),
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "Referer": "https://www.baidu.com/",
     }
 
-    r = requests.get(url, headers=headers, timeout=10)
-    r.raise_for_status()
+    r = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
+
+    # 把关键调试信息一起返回，避免“结果空但不知道为啥”
+    debug = {
+        "http_status": r.status_code,
+        "final_url": r.url,
+    }
+
+    # 有时会返回验证码/安全校验页面
+    text_head = (r.text or "")[:500]
+    # if "百度安全验证" in text_head or "安全验证" in text_head or "请输入验证码" in text_head:
+    #     return {"results": [], "debug": {**debug, "blocked": True}}
+    if "百度安全验证" in text_head or "安全验证" in text_head or "请输入验证码" in text_head or "wappass.baidu.com/static/captcha" in r.url:
+        return {"results": [], "error": "captcha_blocked", "debug": {**debug, "blocked": True}}
+
 
     soup = BeautifulSoup(r.text, "lxml")
 
-    # Baidu results are often in #content_left, each item can be .result or [data-log]
+    # 多种可能的结果容器
     container = soup.select_one("#content_left") or soup
-    candidates = container.select("div.result, div.result-op, div[data-log]")
+    blocks = container.select("div.result, div.result-op, div[data-log]")
 
     results: List[Dict[str, Any]] = []
-    for item in candidates:
+    for b in blocks:
         if len(results) >= top_k:
             break
 
-        # Title/link
-        a = item.select_one("h3 a") or item.select_one("a")
+        a = b.select_one("h3 a") or b.select_one("a")
         if not a:
             continue
+
         title = a.get_text(" ", strip=True)
-        href = a.get("href", "")
-
-        # Snippet/abstract: Baidu often uses .c-abstract or .content-right_8Zs40 etc
-        snippet_el = item.select_one(".c-abstract") or item.select_one(".content-right_8Zs40") or item.select_one("div.c-span-last")
-        snippet = snippet_el.get_text(" ", strip=True) if snippet_el else ""
-
-        # Filter out empty titles
-        if not title:
+        href = a.get("href", "").strip()
+        if not title or not href:
             continue
+
+        # 常见摘要 class
+        snippet_el = (
+            b.select_one(".c-abstract")
+            or b.select_one(".content-right_8Zs40")
+            or b.select_one("div.c-span-last")
+            or b.select_one("span.content-right_8Zs40")
+        )
+        snippet = snippet_el.get_text(" ", strip=True) if snippet_el else ""
+        snippet = re.sub(r"\s+", " ", snippet).strip()
 
         results.append({
             "title": title,
             "url": href,
             "snippet": snippet,
-            "source": "baidu"
+            "source": "baidu",
         })
 
-    return {"results": results}
+    # 如果还是空，把页面 title 返回，方便判断是不是反爬页
+    page_title = soup.title.get_text(strip=True) if soup.title else ""
+    return {"results": results, "debug": {**debug, "page_title": page_title}}
 
 # =========================
-# Tool 4: Planner (deterministic)
+# Tool 4: Serper.dev Google search
+# =========================
+def tool_serper_search(query: str, top_k: int = 5) -> Dict[str, Any]:
+    top_k = max(1, min(int(top_k), 10))
+    q = (query or "").strip()
+    if not q:
+        return {"results": []}
+
+    api_key = os.getenv("SERPER_API_KEY", "").strip()
+    if not api_key:
+        return {"results": [], "error": "missing_SERPER_API_KEY"}
+
+    url = "https://google.serper.dev/search"
+    headers = {
+        "X-API-KEY": api_key,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "pyforai-projectB/1.0",
+    }
+    payload = {"q": q, "num": top_k}
+
+    r = requests.post(url, headers=headers, json=payload, timeout=12)
+
+    if r.status_code != 200:
+        return {
+            "results": [],
+            "error": f"serper_http_{r.status_code}",
+            "debug": {
+                "http_status": r.status_code,
+                "body_head": (r.text or "")[:300],
+            },
+        }
+
+    data = r.json()
+    results: List[Dict[str, Any]] = []
+    for item in (data.get("organic") or [])[:top_k]:
+        results.append({
+            "title": item.get("title", ""),
+            "url": item.get("link", ""),
+            "snippet": item.get("snippet", ""),
+            "source": "serper",
+        })
+    return {"results": results}
+
+
+# =========================
+# Tool 5: Planner (deterministic)
 # =========================
 def tool_planner(goal: str, constraints: str = "", tools_available: List[str] = None) -> Dict[str, Any]:
     """
@@ -200,6 +275,7 @@ class ToolRegistry:
             "calc": tool_calc,
             "wiki_search": tool_wiki_search,
             "baidu_search": tool_baidu_search,
+            "serper_search": tool_serper_search,
             "planner": tool_planner,
         }
 
@@ -296,6 +372,22 @@ def qwen_tools_schema() -> List[Dict[str, Any]]:
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Search query"},
+                    "top_k": {"type": "integer", "minimum": 1, "maximum": 10}
+                },
+                "required": ["query"],
+                "additionalProperties": False
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "serper_search",
+                "description": "Web search via Serper (Google Search API). Returns title/url/snippet.",
+                "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
                     "top_k": {"type": "integer", "minimum": 1, "maximum": 10}
                 },
                 "required": ["query"],
