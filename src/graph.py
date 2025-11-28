@@ -121,6 +121,28 @@ def _has_text_action(content: str) -> bool:
     return bool(content) and bool(_ACTION_RE.search(content))
 
 
+def detect_prompt_injection(text: str) -> bool:
+    """
+    Heuristic check for prompt injection attempts.
+    Returns True if an attack pattern is detected.
+    """
+    patterns = [
+        r"(?i)ignore\s+previous\s+instructions",
+        r"(?i)ignore\s+all\s+previous\s+instructions",
+        r"(?i)forget\s+all\s+instructions",
+        r"(?i)system\s+prompt",
+        r"(?i)you\s+are\s+now",
+        r"(?i)do\s+anything\s+now",
+        r"(?i)jailbreak",
+        r"(?i)DAN\s+mode",
+        r"(?i)ignore\s+safety\s+guidelines",
+    ]
+    for p in patterns:
+        if re.search(p, text):
+            return True
+    return False
+
+
 def build_app(cfg: AgentConfig):
     client = build_qwen_client(cfg)
     tools_schema = qwen_tools_schema()
@@ -480,6 +502,13 @@ Final: The iPhone 15 was introduced on September 12, 2023 [serp_1].
         return {"answer": "Error: loop fell through", "trace": []}
 
     def run(question: str) -> Dict[str, Any]:
+        # Safety Check
+        if getattr(cfg, "enable_safety_filter", True) and detect_prompt_injection(question):
+            return {
+                "answer": "I cannot fulfill this request due to safety policies (Prompt Injection Detected).",
+                "trace": []
+            }
+
         # Check for consistency_k in config, default to 1 if not present
         k = getattr(cfg, "consistency_k", 1)
         
@@ -564,4 +593,4 @@ Return ONLY the index number of the best answer (e.g. 1). Do not output anything
         return best_res
 
     return run
-            
+

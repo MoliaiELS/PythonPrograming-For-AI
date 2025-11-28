@@ -19,6 +19,8 @@ class AgentConfig:
      # Self-consistency
     consistency_k: int = 3       # Number of traces to run (majority vote)
 
+    # Safety
+    enable_safety_filter: bool = True
 
     # Logging
     trace_path: str = "trace.jsonl"
