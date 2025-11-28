@@ -2,5 +2,5 @@
 **/__pycache__/
 **/*.py[cod]
 # 忽略log下面的所有文件
-logs/
+log/
 *.log
