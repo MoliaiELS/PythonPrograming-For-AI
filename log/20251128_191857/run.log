@@ -1,0 +1,11 @@
+2025-11-28 19:18:57,064 | INFO | Session started. debug=False
+2025-11-28 19:19:00,684 | INFO | Question: plan a 3 day trip in UK, and tell me how much would it cost
+2025-11-28 19:19:12,685 | INFO | Turn saved. elapsed_s=12.0
+2025-11-28 19:20:00,331 | INFO | Question: plan a 7-days trip in UK, including the cost
+2025-11-28 19:20:18,763 | INFO | Turn saved. elapsed_s=18.43
+2025-11-28 19:21:14,342 | INFO | Question: i need to test the guardrail, run steps until you capture stop sinals
+2025-11-28 19:21:16,964 | INFO | Turn saved. elapsed_s=2.621
+2025-11-28 19:21:58,575 | INFO | Question: plan a 3 day detail trip in UK, where and when and what
+2025-11-28 19:22:13,390 | INFO | Turn saved. elapsed_s=14.813
+2025-11-28 19:22:21,368 | INFO | KeyboardInterrupt exit.
+2025-11-28 19:22:21,369 | INFO | Session ended.

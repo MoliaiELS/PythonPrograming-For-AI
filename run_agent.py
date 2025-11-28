@@ -169,6 +169,7 @@ def main():
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI colors")
+    parser.add_argument("--config", type=str, default="", help="Path to a JSON config file (optional)")
     args = parser.parse_args()
 
     global USE_COLOR
@@ -186,6 +187,23 @@ def main():
     from src.graph import build_app
 
     cfg = AgentConfig()
+
+    # Optional: load settings from a JSON config file
+    # Keys match AgentConfig field names, for example:
+    # {"model":"qwen-plus","temperature":0.2,"max_tool_calls":6,"tool_timeout_s":6.0}
+    if args.config:
+        try:
+            with open(args.config, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                for k, v in data.items():
+                    if hasattr(cfg, k):
+                        setattr(cfg, k, v)
+            else:
+                logger.warning("Config file is not a JSON object: %s", args.config)
+        except Exception as e:
+            logger.warning("Failed to load config file %s: %s", args.config, e)
+
 
     # Force trace path into this run directory
     trace_path = session_dir / "trace.jsonl"
@@ -315,6 +333,22 @@ def main():
         print(_c(hr("─"), "36"))
         print(_c(f"Log dir: {ui.session_dir}", "2"))
         print(_c(f"Trace:   {ui.last_trace_path}", "2"))
+
+        # Optional: show the latest tool observation when debug is on
+        if ui.debug:
+            try:
+                trace = (result or {}).get("trace", []) or []
+                last_tool = None
+                for ev in reversed(trace):
+                    if isinstance(ev, dict) and ev.get("type") == "tool":
+                        last_tool = ev
+                        break
+                if last_tool:
+                    print(_c("\n[debug] latest observation", "2"))
+                    print(_c(f"tool: {last_tool.get('tool', last_tool.get('action',''))}", "2"))
+                    print(_c(str(last_tool.get('observation',''))[:800], "2"))
+            except Exception:
+                logger.exception("Failed to print latest observation")
 
         # Write local log for this turn
         turn = {

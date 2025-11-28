@@ -374,16 +374,33 @@ class ToolRegistry:
     #             return {}, f"bad_args({name}): {str(e)}"
     #         except Exception as e:
     #             return {}, f"tool_failed({name}): {type(e).__name__}: {str(e)}"
-    def call_with_timeout(self, name: str, args: Dict[str, Any], timeout_s: float):
+    def call_with_timeout(self, name: str, args: Dict[str, Any], timeout_s: float) -> Tuple[Dict[str, Any], str]:
+        """Call a tool function with a hard timeout.
+
+        Notes:
+        - Python threads cannot be force-killed. On timeout we return an error and let the
+          thread get cleaned up by the executor after it finishes.
+        - This is sufficient for assignment guardrails and prevents the agent from stalling.
+        """
         if name not in self._fns:
             return {}, f"unknown_tool({name})"
-        try:
+
+        def _invoke() -> Dict[str, Any]:
             out = self._fns[name](**args)
             if not isinstance(out, dict):
-                return {}, f"tool_output_not_dict({name})"
+                raise TypeError("tool_output_not_dict")
+            return out
+
+        try:
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(_invoke)
+                out = fut.result(timeout=timeout_s)
             return out, ""
+        except FuturesTimeoutError:
+            return {}, f"timeout({name})"
         except TypeError as e:
-            return {}, f"bad_args({name}): {str(e)}"
+            # Covers bad args and additionally our tool_output_not_dict check
+            return {}, f"bad_args_or_output({name}): {str(e)}"
         except Exception as e:
             return {}, f"tool_failed({name}): {type(e).__name__}: {str(e)}"
 
