@@ -1,5 +1,0 @@
-2025-11-28 19:09:06,607 | INFO | Session started. debug=False
-2025-11-28 19:09:28,690 | INFO | Question: plan a 3 day trip in UK, and tell me how much would it cost
-2025-11-28 19:09:31,416 | INFO | Turn saved. elapsed_s=2.725
-2025-11-28 19:18:29,050 | INFO | KeyboardInterrupt exit.
-2025-11-28 19:18:29,051 | INFO | Session ended.
