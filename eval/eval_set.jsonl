@@ -8,3 +8,18 @@
 {"id":"p1","type":"plan","question":"First call planner, then solve: Find the capital of Japan and compute 2+3.","gold_contains":["Tokyo","5"]}
 {"id":"p2","type":"plan","question":"First call planner, then answer: What is LangGraph in one sentence?","gold_contains":["graph","agent"]}
 {"id":"p3","type":"plan","question":"First call planner, then compute: (9-3)*(9-3).","gold_contains":["36"]}
+{"id":"c6","type":"calc","question":"Calculate 15 * 15.","gold":"225"}
+{"id":"c7","type":"calc","question":"What is the square root of 144?","gold":"12"}
+{"id":"c8","type":"calc","question":"Compute 50 - 30 / 2.","gold":"35"}
+{"id":"c9","type":"calc","question":"Calculate 100 * 5.5.","gold":"550"}
+{"id":"c10","type":"calc","question":"What is 123 + 456?","gold":"579"}
+{"id":"w3","type":"wiki","question":"Who painted the Mona Lisa?","gold_contains":["Leonardo","Vinci"]}
+{"id":"w4","type":"wiki","question":"What is the chemical symbol for Gold?","gold_contains":["Au"]}
+{"id":"w5","type":"wiki","question":"In which year did World War II end?","gold_contains":["1945"]}
+{"id":"w6","type":"wiki","question":"Who wrote the novel '1984'?","gold_contains":["Orwell"]}
+{"id":"w7","type":"wiki","question":"What is the largest planet in our solar system?","gold_contains":["Jupiter"]}
+{"id":"p4","type":"plan","question":"First call planner, then find out who wrote 'Hamlet'.","gold_contains":["Shakespeare"]}
+{"id":"p5","type":"plan","question":"First call planner, then calculate the number of hours in 3 days.","gold_contains":["72"]}
+{"id":"p6","type":"plan","question":"First call planner, then find the capital of Germany.","gold_contains":["Berlin"]}
+{"id":"p7","type":"plan","question":"First call planner, then compute 25 * 4.","gold_contains":["100"]}
+{"id":"p8","type":"plan","question":"First call planner, then tell me the boiling point of water in Celsius.","gold_contains":["100"]}
