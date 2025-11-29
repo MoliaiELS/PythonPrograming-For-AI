@@ -89,6 +89,16 @@ Useful commands:
 
 Logs are saved automatically under the `log/` directory, including a `trace.jsonl` file for each run session.
 
+#### 2.4 Run evaluation script
+
+Use 'Qwen-turbo' to do automatic evaluation:
+
+```bash
+#under project root
+python eval/score_eval.py
+```
+---
+
 #### 2.4 Modifying Configuration
 
 Configuration is defined in `config.py`. Common settings include:
@@ -133,6 +143,9 @@ A typical structure looks like:
 ├── log/
 │   └── YYYYMMDD_HHMMSS/
 │       └── trace.jsonl           # Structured trace logs
+├── eval/
+│   ├── eval_set.jsonl            # Evaluation question set
+│   └── score_eval.py             # Evaluation script
 └── README.md                     # This file
 ```
 
