@@ -19,6 +19,7 @@ class AgentState(TypedDict):
     last_tool_sig: Optional[str]
     repeat_count: int
     trace: List[Dict[str, Any]]
+    total_tokens: int  # Track token usage
 
 
 def _now_ms() -> int:
@@ -224,6 +225,11 @@ Final: The iPhone 15 was introduced on September 12, 2023 [serp_1].
             tool_choice="auto",
             parallel_tool_calls=False,
         )
+
+        # Track token usage
+        usage = getattr(resp, "usage", None)
+        if usage:
+            state["total_tokens"] = state.get("total_tokens", 0) + usage.total_tokens
 
         msg = resp.choices[0].message
         # Convert response message to plain dict
@@ -517,8 +523,11 @@ Final: The iPhone 15 was introduced on September 12, 2023 [serp_1].
 
         # Run K traces
         results = []
+        total_tokens_all_traces = 0
         for i in range(k):
-            results.append(_run_single(question))
+            res = _run_single(question)
+            total_tokens_all_traces += res.get("total_tokens", 0)
+            results.append(res)
 
         # 1. Simple Exact Match Check (Fast Path)
         normalized = [r["answer"].strip().lower() for r in results]
@@ -528,6 +537,7 @@ Final: The iPhone 15 was introduced on September 12, 2023 [serp_1].
         # If unanimous (everyone agrees exactly), return immediately
         if winner_count == k:
             best_res = next(r for r, n in zip(results, normalized) if n == winner_val)
+            best_res["total_tokens"] = total_tokens_all_traces # Aggregate tokens
             best_res["trace"].append({
                 "type": "consistency_vote",
                 "method": "unanimous",
@@ -559,6 +569,11 @@ Return ONLY the index number of the best answer (e.g. 1). Do not output anything
                 messages=[{"role": "user", "content": verifier_prompt}],
                 temperature=0.0 # Deterministic judgment
             )
+            
+            # Track verifier tokens
+            if resp.usage:
+                total_tokens_all_traces += resp.usage.total_tokens
+                
             content = resp.choices[0].message.content.strip()
             
             # Extract the number from response (e.g. "1" or "The best is 1")
@@ -567,6 +582,7 @@ Return ONLY the index number of the best answer (e.g. 1). Do not output anything
                 idx = int(match.group(0)) - 1
                 if 0 <= idx < k:
                     best_res = results[idx]
+                    best_res["total_tokens"] = total_tokens_all_traces # Aggregate tokens
                     best_res["trace"].append({
                         "type": "consistency_vote",
                         "method": "verifier_llm",
@@ -581,6 +597,7 @@ Return ONLY the index number of the best answer (e.g. 1). Do not output anything
 
         # 3. Fallback: Simple Majority Vote Heuristic
         best_res = next(r for r, n in zip(results, normalized) if n == winner_val)
+        best_res["total_tokens"] = total_tokens_all_traces # Aggregate tokens
         
         best_res["trace"].append({
             "type": "consistency_vote",

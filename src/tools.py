@@ -362,7 +362,7 @@ class ToolRegistry:
             "baidu_search": tool_baidu_search,
             "serper_search": tool_serpapi_search,
             "web_search": tool_web_search,
-            "planner": tool_planner,
+            "planner": tool_planner, 
         }
 
     def allowed_tools(self) -> List[str]:

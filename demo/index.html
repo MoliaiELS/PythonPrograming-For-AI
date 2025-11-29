@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Visualization Demo</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="trace_style.css">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Marked for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <i class="fa-solid fa-robot"></i> Agent Demo
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="chat-container" id="chat-container">
+                <div class="welcome-message">
+                    <h1>Hello, I'm your AI Agent.</h1>
+                    <p>Ask me anything. I can use tools like Calculator, Search, and Planner.</p>
+                </div>
+                <!-- Messages will be injected here -->
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <input type="text" id="user-input" placeholder="Ask a question..." autocomplete="off">
+                    <button id="send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </main>
+
+        <aside class="trace-sidebar" id="trace-sidebar">
+            <div class="trace-header" id="trace-toggle">
+                <h3><i class="fa-solid fa-code-branch"></i> Agent Trace</h3>
+                <button class="toggle-btn"><i class="fa-solid fa-chevron-down"></i></button>
+            </div>
+            <div class="trace-content" id="trace-content">
+                <div class="empty-trace">No trace available yet.</div>
+                <!-- Trace items will be injected here -->
+            </div>
+        </aside>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

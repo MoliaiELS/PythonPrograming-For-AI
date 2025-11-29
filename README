@@ -55,7 +55,8 @@ This project requires API keys for LLM and optional search tools.
     QWEN_MODEL="qwen-plus"
    ```
 
-2. you can get the key at "https://serpapi.com/dashboard" and qwen official website.
+2. For `SERPAPI_API_KEY`, you can get a free key from [SerpAPI](https://serpapi.com/manage-api-key).
+3. For `DASHSCOPE_API_KEY` and `DASHSCOPE_API_KEY`, you can get a free key from [DashScope](https://bailian.console.aliyun.com/?tab=api#/api/?type=model&url=2712195).
 
 #### 2.3 Running the Agent
 

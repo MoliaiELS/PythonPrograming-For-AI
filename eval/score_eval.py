@@ -62,7 +62,7 @@ def main():
     cfg = AgentConfig(trace_path="eval_trace.jsonl")
     
     # Force consistency_k=1 for evaluation to speed it up
-    cfg.consistency_k = 1
+    # cfg.consistency_k = 1
 
     # Build the agent runner
     run_agent = build_app(cfg) 
@@ -99,10 +99,12 @@ def main():
             # The run_agent function returns a dict with "answer"
             res = run_agent(question)
             pred = res.get("answer", "")
+            tokens = res.get("total_tokens", 0)
 
         except Exception as e:
             error_msg = str(e)
             pred = "[ERROR]"
+            tokens = 0
             print(f"Error running agent on id {ex.get('id')}: {e}")
         
         duration = time.time() - start_time
@@ -158,14 +160,20 @@ def main():
             "pred": pred,
             "passed": passed,
             "duration": round(duration, 2),
+            "tokens": tokens,
             "error": error_msg
         })
 
     # 3. Output Statistics
     accuracy = ok_count / max(1, len(items))
+    total_tokens_used = sum(r["tokens"] for r in results)
+    avg_tokens = total_tokens_used / max(1, len(items))
+
     print(f"\n════════════════════════════════")
     print(f"Evaluation Complete")
     print(f"Accuracy: {accuracy:.2%} ({ok_count}/{len(items)})")
+    print(f"Total Tokens: {total_tokens_used}")
+    print(f"Avg Tokens/Query: {avg_tokens:.1f}")
     print(f"════════════════════════════════")
 
     # Print detailed results to console instead of saving to file
@@ -176,6 +184,7 @@ def main():
         print(f"  Q: {res['question']}")
         print(f"  Gold: {res['gold']}")
         print(f"  Pred: {res['pred']}")
+        print(f"  Tokens: {res['tokens']}")
         if res["error"]:
             print(f"  Error: {res['error']}")
         print("-" * 40)
