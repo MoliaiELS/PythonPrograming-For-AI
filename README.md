@@ -203,6 +203,25 @@ Each run creates a timestamped log folder:
 
 In debug mode, the CLI can print tool observations to the console.
 
+#### 4.5 Evaluation Method
+1. run from the project root：
+ ```bash
+python eval/score_eval.py
+```
+
+2. **to modify evaluation dataset:**
+   add new evaluation questions with golden answers/answer set with the format shown in `eval_set.jsonl`:
+```json
+{"id":"c1","type":"calc","question":"Compute (12+8)/5.","gold":"4"}
+```
+
+#### 4.6 Run project demo
+1. run from the project root：
+ ```bash
+python demo/backend.py
+```
+2. right click `index.html` and choose `open in default browser`.
+
 ---
 
 ### 5. To Be Completed (Placeholders for Teammates)
