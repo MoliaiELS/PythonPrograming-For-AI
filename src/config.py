@@ -16,7 +16,7 @@ class AgentConfig:
     tool_timeout_s: float = 6.0   # Per-tool timeout
     max_repeat_same_call: int = 2 # Repeat same tool call signature limit
 
-     # Self-consistency
+    # Self-consistency
     consistency_k: int = 3       # Number of traces to run (majority vote)
 
     # Safety

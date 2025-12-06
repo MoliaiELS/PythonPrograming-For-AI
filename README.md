@@ -26,7 +26,6 @@ Responsible for the advanced direction implementation.
 1. Create a Python environment (recommended: conda)
 
    * Python version: 3.10 or 3.11 recommended
-
 2. Install dependencies
 
    1. Make sure you are in the project root directory
@@ -38,9 +37,9 @@ Responsible for the advanced direction implementation.
 
 #### 2.2 API Key Setup (.env)
 
-This project requires API keys for LLM and optional search tools. 
+This project requires API keys for LLM and optional search tools.
 
-1. Paste the relevant api key in `.env` 
+1. Paste the relevant api key in `.env`
 
    ```bash
     SERPAPI_API_KEY= "your_api_key"
@@ -54,7 +53,6 @@ This project requires API keys for LLM and optional search tools.
     # Model suggestion: qwen-plus supports tools/function calling
     QWEN_MODEL="qwen-plus"
    ```
-
 2. For `SERPAPI_API_KEY`, you can get a free key from [SerpAPI](https://serpapi.com/manage-api-key).
 3. For `DASHSCOPE_API_KEY` and `DASHSCOPE_API_KEY`, you can get a free key from [DashScope](https://bailian.console.aliyun.com/?tab=api#/api/?type=model&url=2712195).
 
@@ -90,21 +88,39 @@ Useful commands:
 
 Logs are saved automatically under the `log/` directory, including a `trace.jsonl` file for each run session.
 
-#### 2.4 Run evaluation script
+#### 2.4 Evaluation Method
 
-Use 'Qwen-turbo' to do automatic evaluation:
+1. run from the project root：
 
 ```bash
-#under project root
 python eval/score_eval.py
 ```
+
+2. **to modify evaluation dataset:**
+   add new evaluation questions with golden answers/answer set with the format shown in `eval_set.jsonl`:
+
+```json
+{"id":"c1","type":"calc","question":"Compute (12+8)/5.","gold":"4"}
+```
+
+#### 2.5 Run project demo
+
+1. run from the project root：
+
+```bash
+python demo/backend.py
+```
+
+2. right click `index.html` and choose `open in default browser`.
+
 ---
 
-#### 2.4 Modifying Configuration
+#### 2.6 Modifying Configuration
 
 Configuration is defined in `config.py`. Common settings include:
 
 ```python
+
 @dataclass
 class AgentConfig:
     # Qwen OpenAI-compatible
@@ -119,6 +135,13 @@ class AgentConfig:
     max_tool_calls: int = 6       # Hard limit on tool executions
     tool_timeout_s: float = 6.0   # Per-tool timeout
     max_repeat_same_call: int = 2 # Repeat same tool call signature limit
+
+    # Self-consistency
+    consistency_k: int = 3       # Number of traces to run (majority vote for self-consistency)
+
+    # Safety
+    enable_safety_filter: bool = True # prevent prompt injection attack
+
 
     # Logging
     trace_path: str = "trace.jsonl"
@@ -149,7 +172,6 @@ A typical structure looks like:
 │   └── score_eval.py             # Evaluation script
 └── README.md                     # This file
 ```
-
 
 ---
 
@@ -203,30 +225,22 @@ Each run creates a timestamped log folder:
 
 In debug mode, the CLI can print tool observations to the console.
 
-#### 4.5 Evaluation Method
-1. run from the project root：
- ```bash
-python eval/score_eval.py
-```
+#### 4.5 Hallucination Control
 
-2. **to modify evaluation dataset:**
-   add new evaluation questions with golden answers/answer set with the format shown in `eval_set.jsonl`:
-```json
-{"id":"c1","type":"calc","question":"Compute (12+8)/5.","gold":"4"}
-```
+All search tools return evidence with doc_id and score. The agent must cite these sources, and a post-answer audit verifies citation validity and confidence, automatically retrying or refusing when evidence is insufficient.
 
-#### 4.6 Run project demo
-1. run from the project root：
- ```bash
-python demo/backend.py
-```
-2. right click `index.html` and choose `open in default browser`.
+#### 4.6 Self-Consistency
 
----
+The agent can run the full ReAct loop multiple times (consistency_k) and select the majority answer after normalizing outputs, improving stability and reducing random reasoning errors.
 
-### 6. Notes and Troubleshooting
+#### 4.7 Safety Filter
 
-#### 6.1 No Tool Observation Appears in Console
+A pre-processing guard scans user inputs for prompt-injection patterns (e.g., “ignore previous instructions”). Suspicious queries are blocked immediately with a safe refusal before the agent executes any tools.
+
+
+### 5. Notes and Troubleshooting
+
+#### 5.1 No Tool Observation Appears in Console
 
 * Turn on debug:
 
@@ -235,7 +249,7 @@ python demo/backend.py
   ```
 * Observations are always written to `trace.jsonl` even if not printed.
 
-#### 6.2 Agent Stops After Printing Action
+#### 5.2 Agent Stops After Printing Action
 
 This usually happens when:
 
@@ -244,7 +258,7 @@ This usually happens when:
 
 Check `trace.jsonl` to see the final router decision and any parsing error.
 
-#### 6.3 API Errors
+#### 5.3 API Errors
 
 If you see auth errors:
 
@@ -253,6 +267,6 @@ If you see auth errors:
 
 ---
 
-### 7. License
+### 6. License
 
 (Leave blank or fill based on course requirement.)
