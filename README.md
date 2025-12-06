@@ -170,7 +170,14 @@ A typical structure looks like:
 ├── eval/
 │   ├── eval_set.jsonl            # Evaluation question set
 │   └── score_eval.py             # Evaluation script
+│
+├── demo/
+│   ├── backend.py                # demo run script
+│
 └── README.md                     # This file
+
+
+
 ```
 
 ---
@@ -231,7 +238,7 @@ All search tools return evidence with doc_id and score. The agent must cite thes
 
 #### 4.6 Self-Consistency
 
-The agent can run the full ReAct loop multiple times (consistency_k) and select the majority answer after normalizing outputs, improving stability and reducing random reasoning errors.
+The agent can run the full ReAct loop multiple times (consistency_k) and select the best answer by majority voting and LLM verifier after normalizing outputs, improving stability and reducing random reasoning errors.
 
 #### 4.7 Safety Filter
 
@@ -267,6 +274,4 @@ If you see auth errors:
 
 ---
 
-### 6. License
 
-(Leave blank or fill based on course requirement.)
