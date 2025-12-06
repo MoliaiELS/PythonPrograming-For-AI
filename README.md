@@ -224,33 +224,6 @@ python demo/backend.py
 
 ---
 
-### 5. To Be Completed (Placeholders for Teammates)
-
-#### 5.1 Evaluation (Luo Xueyin)
-
-* [ ] Evaluation script location:
-* [ ] Test set description:
-* [ ] Metrics:
-* [ ] Results summary:
-* [ ] Reproducibility notes:
-
-#### 5.2 Advanced Direction (Xie Yanzhe)
-
-* [ ] Advanced feature name:
-* [ ] Design motivation:
-* [ ] Implementation details:
-* [ ] How to run advanced mode:
-* [ ] Known issues / limitations:
-
-#### 5.3 Final Report
-
-* [ ] Report file name:
-* [ ] Key findings:
-* [ ] Screenshots / example conversations:
-* [ ] Self reflection / limitations:
-
----
-
 ### 6. Notes and Troubleshooting
 
 #### 6.1 No Tool Observation Appears in Console
